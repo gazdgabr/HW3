@@ -10,7 +10,9 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, ValidationError
 from wtforms.validators import Required, Length, Regexp
 from flask_sqlalchemy import SQLAlchemy
+from flask_script import Manager, Shell
 
+import re
 ############################
 # Application configurations
 ############################
@@ -28,7 +30,6 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 ### App setup ####
 ##################
 db = SQLAlchemy(app) # For database use
-
 
 #########################
 #########################
@@ -54,12 +55,14 @@ db = SQLAlchemy(app) # For database use
 ## Should have a __repr__ method that returns strings of a format like:
 #### {Tweet text...} (ID: {tweet id})
 
-class Tweet(db.Model):
-    __tablename__ = "Tweets"
+class Tweets(db.Model):
+    __tablename__ = "tweets"
     id = db.Column(db.Integer,primary_key=True)
     text = db.Column(db.String(280))
     user_id = db.Column(db.Integer,db.ForeignKey("users.id"))
 
+    def __repr__(self):
+        return "{} (ID: {})".format(text, self.id)
 
 # - User
 ## -- id (Integer, Primary Key)
@@ -69,13 +72,15 @@ class Tweet(db.Model):
 
 ## Should have a __repr__ method that returns strings of a format like:
 #### {username} | ID: {id}
-class User(db.Model):
-    __tablename__ = "Users"
+class Users(db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer,primary_key=True)
     username = db.Column(db.String(64),unique=True)
     display_name = db.Column(db.String(124))
-    tweets = db.relationship('Tweet',backref='User')
+    tweets = db.relationship('Tweets',backref='Users')
 
-#    def __repr__():
+    def __repr__(self):
+        return "{} | ID: {}".format(username, self.id)
 
 ########################
 ##### Set up Forms #####
@@ -88,11 +93,23 @@ class User(db.Model):
 ## -- display_name: the display name of the twitter user with that username (Required, + set up custom validation for this -- see below)
 
 # HINT: Check out index.html where the form will be rendered to decide what field names to use in the form class definition
+
 class WishfulTweet(FlaskForm):
-    text = StringField("Tweet something: ",validators=[Required()])
-    username = StringField("Enter your username: ", validators=[Required(),Length(1,64),Regexp('^[^@]')])
-    display_name = StringField("Enter a display name: ", validators=[Required(),Length(1,64),Regexp('^[A-Za-z]+/s[A-Za-z]+.*')])
+    text = StringField("Tweet something: ",validators=[Required(),Length(1,280)])
+    username = StringField("Enter your username: ", validators=[Required(),Length(1,64)])
+    display_name = StringField("Enter a display name: ", validators=[Required()])
     submit = SubmitField()
+
+    def validate_display_name(self, field):
+        valid = re.findall('^[A-Za-z]+\s[A-Za-z]+', field.data)
+        if len(valid) == 0:
+            raise ValidationError("Display name must be at least two words.")
+
+    def validate_username(self, field):
+        okay = re.findall('^@', field.data)
+        if len(okay) > 0:
+            raise ValidationError("Username cannot begin with '@'")
+
 # TODO 364: Set up custom validation for this form such that:
 # - the twitter username may NOT start with an "@" symbol (the template will put that in where it should appear)
 # - the display name MUST be at least 2 words (this is a useful technique to practice, even though this is not true of everyone's actual full name!)
@@ -139,7 +156,7 @@ def index():
     # Initialize the form
     form = WishfulTweet()
     # Get the number of Tweets
-    num_tweets = len(Tweet.query.all())
+    num_tweets = len(Tweets.query.all())
 
     # If the form was posted to this route,
     ## Get the data from the form
@@ -150,31 +167,32 @@ def index():
     ## Find out if there's already a user with the entered username
     ## If there is, save it in a variable: user
     ## Or if there is not, then create one and add it to the database
-        user = User.query.filter_by(display_name=name).first()
+        user = Users.query.filter_by(display_name=name).first()
         if not user:
-            user = User(display_name=name)
+            user = Users(display_name=name, username=handle)
 
             db.session.add(user)
             db.session.commit()
     ## If there already exists a tweet in the database with this text and this user id
     # (the id of that user variable above...) ## Then flash a message about the tweet already existing
     ## And redirect to the list of all tweets
-        tweet = Tweet.query.filter_by(text=tweet, user_id=User.id).first()
-        if tweet:
-            flash("Someone already tweeted that!")
+        checkTweet = Tweets.query.filter_by(text=tweet, user_id=Users.id).first()
+        if checkTweet:
+            flash("You already tweeted that!")
             return redirect(url_for('see_all_tweets'))
     ## Assuming we got past that redirect,
     ## Create a new tweet object with the text and user id
     ## And add it to the database
     ## Flash a message about a tweet being successfully added
     ## Redirect to the index page
-        new_tweet = Tweet(text=tweet, user_id=User.id)
+        else:
+            new_tweet = Tweets(text=tweet, user_id=user.id)
 
-        db.session.add(new_tweet)
-        db.session.commit()
+            db.session.add(new_tweet)
+            db.session.commit()
 
-        flash("You just tweeted!")
-        return redirect(url_for('index'))
+            flash("You just tweeted!")
+            return redirect(url_for('index'))
     # PROVIDED: If the form did NOT validate / was not submitted
     errors = [v for v in form.errors.values()]
     if len(errors) > 0:
