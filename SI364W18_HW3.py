@@ -11,7 +11,6 @@ from wtforms import StringField, SubmitField, ValidationError
 from wtforms.validators import Required, Length, Regexp
 from flask_sqlalchemy import SQLAlchemy
 from flask_script import Manager, Shell
-
 import re
 ############################
 # Application configurations
@@ -62,7 +61,12 @@ class Tweets(db.Model):
     user_id = db.Column(db.Integer,db.ForeignKey("users.id"))
 
     def __repr__(self):
-        return "{} (ID: {})".format(text, self.id)
+        return "{} (ID: {})".format(self.text, self.id)
+    def __str__(self):
+        return "{}".format(self.text)
+    def __len__(self):
+        spaceLen = len(re.findall('\s', self.text))
+        return len(self.text) - spaceLen
 
 # - User
 ## -- id (Integer, Primary Key)
@@ -80,8 +84,9 @@ class Users(db.Model):
     tweets = db.relationship('Tweets',backref='Users')
 
     def __repr__(self):
-        return "{} | ID: {}".format(username, self.id)
-
+        return "{} | ID: {}".format(self.username, self.id)
+    def __str__(self):
+        return "{}".format(self.username)
 ########################
 ##### Set up Forms #####
 ########################
@@ -100,6 +105,10 @@ class WishfulTweet(FlaskForm):
     display_name = StringField("Enter a display name: ", validators=[Required()])
     submit = SubmitField()
 
+# TODO 364: Set up custom validation for this form such that:
+# - the twitter username may NOT start with an "@" symbol (the template will put that in where it should appear)
+# - the display name MUST be at least 2 words (this is a useful technique to practice, even though this is not true of everyone's actual full name!)
+
     def validate_display_name(self, field):
         valid = re.findall('^[A-Za-z]+\s[A-Za-z]+', field.data)
         if len(valid) == 0:
@@ -110,9 +119,6 @@ class WishfulTweet(FlaskForm):
         if len(okay) > 0:
             raise ValidationError("Username cannot begin with '@'")
 
-# TODO 364: Set up custom validation for this form such that:
-# - the twitter username may NOT start with an "@" symbol (the template will put that in where it should appear)
-# - the display name MUST be at least 2 words (this is a useful technique to practice, even though this is not true of everyone's actual full name!)
 
 # TODO 364: Make sure to check out the sample application linked in the readme to check if yours is like it!
 
@@ -197,11 +203,14 @@ def index():
     errors = [v for v in form.errors.values()]
     if len(errors) > 0:
         flash("!!!! ERRORS IN FORM SUBMISSION - " + str(errors))
-    return render_template('index.html', form=form) # TODO 364: Add more arguments to the render_template invocation to send data to index.html
+    return render_template('index.html', form=form, num_tweets=num_tweets) # TODO 364: Add more arguments to the render_template invocation to send data to index.html
 
 @app.route('/all_tweets')
 def see_all_tweets():
-    pass # Replace with code
+    all_tweets = Tweets.query.all()
+
+    tweets_users = [(t, Users.query.filter_by(id=t.user_id).first()) for t in all_tweets]
+    return render_template('all_tweets.html', all_tweets=tweets_users)
     # TODO 364: Fill in this view function so that it can successfully render the template all_tweets.html, which is provided.
     # HINT: Careful about what type the templating in all_tweets.html is expecting! It's a list of... not lists, but...
     # HINT #2: You'll have to make a query for the tweet and, based on that, another query for the username that goes with it...
@@ -209,18 +218,30 @@ def see_all_tweets():
 
 @app.route('/all_users')
 def see_all_users():
-    pass # Replace with code
+    all_users = Users.query.all()
+    return render_template('all_users.html', users=all_users)
     # TODO 364: Fill in this view function so it can successfully render the template all_users.html, which is provided.
 
 # TODO 364
-# Create another route (no scaffolding provided) at /longest_tweet with a view function get_longest_tweet (see details below for what it should do)
+# Create another route (no scaffolding provided) at /longest_tweet with a view function get_longest_tweet
+# (see details below for what it should do)
+@app.route('/longest_tweet')
+def get_longest_tweet():
+    all_tweets = Tweets.query.all()
+    long1 = max(all_tweets, key=len)
+
+    the_user = Users.query.filter_by(id=long1.user_id).first()
+    return render_template('longest_tweet.html', tweet_text=long1, user=the_user.username, display_name=the_user.display_name)
 # TODO 364
 # Create a template to accompany it called longest_tweet.html that extends from base.html.
 
 # NOTE:
-# This view function should compute and render a template (as shown in the sample application) that shows the text of the tweet currently saved in the database which has the most NON-WHITESPACE characters in it, and the username AND display name of the user that it belongs to.
+# This view function should compute and render a template (as shown in the sample application) that shows the text of the
+# tweet currently saved in the database which has the most NON-WHITESPACE characters in it, and the username AND display name
+# of the user that it belongs to.
 # NOTE: This is different (or could be different) from the tweet with the most characters including whitespace!
-# Any ties should be broken alphabetically (alphabetically by text of the tweet). HINT: Check out the chapter in the Python reference textbook on stable sorting.
+# Any ties should be broken alphabetically (alphabetically by text of the tweet). HINT: Check out the chapter in the Python
+# reference textbook on stable sorting.
 # Check out /longest_tweet in the sample application for an example.
 
 # HINT 2: The chapters in the Python reference textbook on:
