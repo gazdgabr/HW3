@@ -91,7 +91,7 @@ class Users(db.Model):
 ##### Set up Forms #####
 ########################
 
-# TODO 364: Fill in the rest of the below Form class so that someone running this web app will be able to fill in information about tweets they wish existed to save in the database:
+# TODO 364: Fill in the rest of the  below Form class so that someone running this web app will be able to fill in information about tweets they wish existed to save in the database:
 
 ## -- text: tweet text (Required, should not be more than 280 characters)
 ## -- username: the twitter username who should post it (Required, should not be more than 64 characters)
@@ -228,7 +228,8 @@ def see_all_users():
 @app.route('/longest_tweet')
 def get_longest_tweet():
     all_tweets = Tweets.query.all()
-    long1 = max(all_tweets, key=len)
+    sortedList = sorted(all_tweets, key=lambda tweet: tweet.text)
+    long1 = max(sortedList, key=len)
 
     the_user = Users.query.filter_by(id=long1.user_id).first()
     return render_template('longest_tweet.html', tweet_text=long1, user=the_user.username, display_name=the_user.display_name)
